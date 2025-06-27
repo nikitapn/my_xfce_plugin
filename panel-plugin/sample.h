@@ -20,7 +20,38 @@
 #ifndef __SAMPLE_H__
 #define __SAMPLE_H__
 
+#include <gtk/gtk.h>
+#include <libxfce4panel/libxfce4panel.h>
+#include <pthread.h>
+#include <time.h>
+
 G_BEGIN_DECLS
+
+#define MAX_BLOCK_SIZE 128
+
+/* Block identifiers for different status components */
+typedef enum {
+    BLOCK_WEATHER = 0,
+    BLOCK_EXCHANGE_RATE,
+    BLOCK_BATTERY,
+    BLOCK_MEMORY,
+    BLOCK_DATE,
+    BLOCK_COUNT
+} BlockId;
+
+/* Structure to hold individual block data */
+typedef struct {
+    int  len;
+    char data[MAX_BLOCK_SIZE];
+} BlockData;
+
+/* Status bar update thread data */
+typedef struct {
+    GThread     *thread;
+    gboolean     running;
+    gint         update_interval;
+    gpointer     user_data;
+} StatusThread;
 
 /* plugin structure */
 typedef struct
@@ -32,10 +63,26 @@ typedef struct
     GtkWidget       *hvbox;
     GtkWidget       *label;
 
-    /* sample settings */
-    gchar           *setting1;
-    gint             setting2;
-    gboolean         setting3;
+    /* Status bar data */
+    BlockData       blocks[BLOCK_COUNT];
+    pthread_mutex_t mutex;
+    
+    /* Update threads */
+    StatusThread    date_thread;
+    StatusThread    memory_thread;
+    StatusThread    weather_thread;
+    StatusThread    exchange_thread;
+    StatusThread    battery_thread;
+    
+    /* Settings */
+    gchar           *weather_location;    /* latitude,longitude */
+    gchar           *exchange_api_key;    /* OpenExchangeRates API key */
+    gint             update_interval;     /* Base update interval in seconds */
+    gboolean         show_weather;
+    gboolean         show_exchange;
+    gboolean         show_battery;
+    gboolean         show_memory;
+    gboolean         show_date;
 }
 SamplePlugin;
 

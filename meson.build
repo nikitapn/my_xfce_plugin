@@ -32,6 +32,12 @@ libxfce4panel = dependency('libxfce4panel-2.0', version: dependency_versions['xf
 libxfce4ui = dependency('libxfce4ui-2', version: dependency_versions['xfce4'])
 libxfce4util = dependency('libxfce4util-1.0', version: dependency_versions['xfce4'])
 
+# Additional dependencies for status bar functionality
+libcurl = dependency('libcurl', required: true)
+libudev = dependency('libudev', required: true)
+threads = dependency('threads', required: true)
+json_glib = dependency('json-glib-1.0', required: true)
+
 feature_cflags = []
 if cc.check_header('string.h')
   feature_cflags += '-DHAVE_STRING_H=1'
