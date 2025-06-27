@@ -27,6 +27,7 @@
 #include <gtk/gtk.h>
 #include <libxfce4util/libxfce4util.h>
 #include <libxfce4panel/libxfce4panel.h>
+#include <pango/pango.h>
 #include <curl/curl.h>
 #include <libudev.h>
 #include <json-glib/json-glib.h>
@@ -82,15 +83,26 @@ update_block (SamplePlugin *sample, BlockId block_id, const char *text)
     
     pthread_mutex_lock(&sample->mutex);
     
-    int len = strlen(text);
+    /* Validate markup before storing it */
+    gchar *validated_text = NULL;
+    if (pango_parse_markup(text, -1, 0, NULL, NULL, NULL, NULL)) {
+        validated_text = g_strdup(text);
+    } else {
+        /* If markup is invalid, escape the text */
+        validated_text = g_markup_escape_text(text, -1);
+        g_warning("Invalid markup in block %d: %s", block_id, text);
+    }
+    
+    int len = strlen(validated_text);
     if (len >= MAX_BLOCK_SIZE) {
         len = MAX_BLOCK_SIZE - 1;
     }
     
     sample->blocks[block_id].len = len;
-    memcpy(sample->blocks[block_id].data, text, len);
+    memcpy(sample->blocks[block_id].data, validated_text, len);
     sample->blocks[block_id].data[len] = '\0';
     
+    g_free(validated_text);
     pthread_mutex_unlock(&sample->mutex);
     
     /* Schedule GUI update */
@@ -140,8 +152,19 @@ update_display (SamplePlugin *sample)
     
     pthread_mutex_unlock(&sample->mutex);
     
-    /* Update label with markup support for colors */
-    gtk_label_set_markup(GTK_LABEL(sample->label), display_text->str);
+    /* Validate the complete markup before setting it */
+    if (display_text->len > 0) {
+        if (pango_parse_markup(display_text->str, -1, 0, NULL, NULL, NULL, NULL)) {
+            /* Update label with markup support for colors */
+            gtk_label_set_markup(GTK_LABEL(sample->label), display_text->str);
+        } else {
+            /* If markup is invalid, show as plain text */
+            g_warning("Invalid final markup: %s", display_text->str);
+            gtk_label_set_text(GTK_LABEL(sample->label), "Status Error");
+        }
+    } else {
+        gtk_label_set_text(GTK_LABEL(sample->label), "Loading...");
+    }
     
     g_string_free(display_text, TRUE);
     
@@ -767,18 +790,29 @@ exchange_thread_func (gpointer data)
                     
                     if (rates) {
                         GString *exchange_text = g_string_new("");
+                        gboolean has_try = FALSE, has_rub = FALSE;
+                        gdouble try_rate = 0.0, rub_rate = 0.0;
                         
                         /* Get TRY and RUB rates */
                         if (json_object_has_member(rates, "TRY")) {
-                            gdouble try_rate = json_object_get_double_member(rates, "TRY");
+                            try_rate = json_object_get_double_member(rates, "TRY");
+                            has_try = TRUE;
+                        }
+                        
+                        if (json_object_has_member(rates, "RUB")) {
+                            rub_rate = json_object_get_double_member(rates, "RUB");
+                            has_rub = TRUE;
+                        }
+                        
+                        /* Build the exchange text carefully */
+                        if (has_try) {
                             g_string_append_printf(exchange_text, 
                                 "<span color='#07d7e8'>TRY</span> <span color='#10bbbb'>%.2f</span>", 
                                 try_rate);
                         }
                         
-                        if (json_object_has_member(rates, "RUB")) {
-                            gdouble rub_rate = json_object_get_double_member(rates, "RUB");
-                            if (exchange_text->len > 0) {
+                        if (has_rub) {
+                            if (has_try) {
                                 g_string_append(exchange_text, " ");
                             }
                             g_string_append_printf(exchange_text, 

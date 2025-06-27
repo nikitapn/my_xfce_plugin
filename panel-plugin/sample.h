@@ -27,7 +27,7 @@
 
 G_BEGIN_DECLS
 
-#define MAX_BLOCK_SIZE 128
+#define MAX_BLOCK_SIZE 256
 
 /* Block identifiers for different status components */
 typedef enum {
